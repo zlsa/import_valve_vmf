@@ -7,42 +7,95 @@ import math
 # [a, b, c, d]
 # where ax+by+cz=d
 
-def dot(a, b):
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+if 0:
+    def dot(a, b):
+        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
-def cross(a, b):
-    return [
-        a[1] * b[2] - b[1] * a[2],
-        a[2] * b[0] - b[2] * a[0],
-        a[0] * b[1] - b[0] * a[1],
-    ]
+    def cross(a, b):
+        return [
+            a[1] * b[2] - b[1] * a[2],
+            a[2] * b[0] - b[2] * a[0],
+            a[0] * b[1] - b[0] * a[1],
+        ]
 
-def vectorAdd(a, b):
-    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
+    def vectorAdd(a, b):
+        return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 
-def vectorMultiply(a, b):
-    return [a[0] * b[0], a[1] * b[1], a[2] * b[2]]
+    def vectorMultiply(a, b):
+        return [a[0] * b[0], a[1] * b[1], a[2] * b[2]]
 
-def vectorSub(a, b):
-    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+    def vectorSub(a, b):
+        return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
 
-def vectorMultiplyScalar(vec, scalar):
-    return [vec[0] * scalar, vec[1] * scalar, vec[2] * scalar]
+    def vectorMultiplyScalar(vec, scalar):
+        return [vec[0] * scalar, vec[1] * scalar, vec[2] * scalar]
 
-def normalize(vec):
-    # dot(vec, vec) is equal to squared-length of vec
-    # we take the inverse sqrt of that
-    multiplier = 1.0 / math.sqrt(dot(vec, vec))
-    return [vec[0] * multiplier, vec[1] * multiplier, vec[2] * multiplier]
+    def normalize(vec):
+        # dot(vec, vec) is equal to squared-length of vec
+        # we take the inverse sqrt of that
+        multiplier = 1.0 / math.sqrt(dot(vec, vec))
+        return [vec[0] * multiplier, vec[1] * multiplier, vec[2] * multiplier]
+
+    def distanceToPlane(point, plane):
+        return dot(point, plane) - plane[3]
+
+    def cutPolygonByPlane(polygon, plane):
+        newPolygon = []
+        for i in range(len(polygon)):
+            edge = [polygon[i], polygon[(i + 1) % len(polygon)]]
+            distances = [distanceToPlane(edge[0], plane), distanceToPlane(edge[1], plane)]
+
+            if distances[0] < 0 and distances[1] < 0:
+                newPolygon.append(edge[0])
+            elif distances[0] >= 0 and distances[1] >= 0:
+                continue
+            else:
+                ratio = distances[0] / (distances[0] - distances[1])
+                intersection = [
+                    edge[0][0] * (1 - ratio) + edge[1][0] * ratio,
+                    edge[0][1] * (1 - ratio) + edge[1][1] * ratio,
+                    edge[0][2] * (1 - ratio) + edge[1][2] * ratio,
+                ]
+                if distances[0] < 0:
+                    newPolygon.append(edge[0])
+                newPolygon.append(intersection)
+        return newPolygon
+
+    # convert a brush (list of planes) to a list of polygons (each polygon is a list of vertices)
+    def brushToFaces(planes):
+        polygons = []
+        for plane in planes:
+            up = [0, 0, 1]
+            if plane[2] < -0.9 or plane[2] > 0.9:
+                up = [1, 0, 0]
+
+            planeRight = normalize(cross(plane, up))
+            planeUp = normalize(cross(plane, planeRight))
+
+            polygon = [
+                vectorMultiplyScalar(vectorSub(planeUp, planeRight), 16384),
+                vectorMultiplyScalar(vectorSub(planeRight, planeUp), 16384),
+                vectorMultiplyScalar(vectorAdd(planeUp, planeRight), 16384),
+            ]
+
+            polygon = list(map(lambda a: vectorAdd(a, vectorMultiplyScalar(plane, plane[3])), polygon))
+
+            for otherPlane in planes:
+                if otherPlane == plane: continue
+                polygon = cutPolygonByPlane(polygon, otherPlane)
+            polygons.append(polygon)
+        return polygons
 
 def distanceToPlane(point, plane):
-    return dot(point, plane) - plane[3]
+    return point.dot(plane[0]) - plane[1]
 
 def cutPolygonByPlane(polygon, plane):
     newPolygon = []
-    for i in range(len(polygon)):
-        edge = [polygon[i], polygon[(i + 1) % len(polygon)]]
-        distances = [distanceToPlane(edge[0], plane), distanceToPlane(edge[1], plane)]
+    # polygon[1:] + [polygon[0]] rotates the whole array
+    edges = list(zip(polygon, polygon[1:] + [polygon[0]]))
+    for edge in edges:
+        distances = [distanceToPlane(edge[0], plane),
+                     distanceToPlane(edge[1], plane)]
 
         if distances[0] < 0 and distances[1] < 0:
             newPolygon.append(edge[0])
@@ -50,43 +103,44 @@ def cutPolygonByPlane(polygon, plane):
             continue
         else:
             ratio = distances[0] / (distances[0] - distances[1])
-            intersection = [
-                edge[0][0] * (1 - ratio) + edge[1][0] * ratio,
-                edge[0][1] * (1 - ratio) + edge[1][1] * ratio,
-                edge[0][2] * (1 - ratio) + edge[1][2] * ratio,
-            ]
+            intersection = edge[0] * (1 - ratio) + edge[1] * ratio
             if distances[0] < 0:
                 newPolygon.append(edge[0])
             newPolygon.append(intersection)
     return newPolygon
 
-# convert a brush (list of planes) to a list of polygons (each polygon is a list of vertices)
 def brushToFaces(planes):
     polygons = []
     for plane in planes:
-        up = [0, 0, 1]
-        if plane[2] < -0.9 or plane[2] > 0.9:
-            up = [1, 0, 0]
+        # 'up' is just a vector which is not perpendicular to the plane
+        up = mathutils.Vector((0, 0, 1))
+        if abs(plane[0].dot(up)) > 0.9:
+            up = mathutils.Vector((1, 0, 0))
+        # two axes that are parallel to the plane (and each other); we don't care which
+        right = plane[0].cross(up).normalized()
+        forward = plane[0].cross(right).normalized()
 
-        planeRight = normalize(cross(plane, up))
-        planeUp = normalize(cross(plane, planeRight))
-
+        # 16 million
+        # this is the largest a map can be without "issues" (i.e. planes that are randomly cut off in one axis)
+        size = 2 ** 24
+        
         polygon = [
-            vectorMultiplyScalar(vectorSub(planeUp, planeRight), 16384),
-            vectorMultiplyScalar(vectorSub(planeRight, planeUp), 16384),
-            vectorMultiplyScalar(vectorAdd(planeUp, planeRight), 16384),
+            right * -size + forward * -size + plane[0] * plane[1],
+            right * -size + forward * +size + plane[0] * plane[1],
+            right * +size + forward * +size + plane[0] * plane[1],
+            right * +size + forward * -size + plane[0] * plane[1],
         ]
 
         for otherPlane in planes:
-            if otherPlane == plane: continue
-            polygon = cutPolygonByPlane(polygon, otherPlane)
+            if otherPlane != plane:
+                polygon = cutPolygonByPlane(polygon, otherPlane)
         polygons.append(polygon)
     return polygons
 
 def triangleToPlaneDistance(triangle):
-    normal = ((triangle[1] - triangle[0]).cross(triangle[2] - triangle[0])).normalized()
+    normal = ((triangle[2] - triangle[0]).cross(triangle[1] - triangle[0])).normalized()
     distance = triangle[0].dot(normal)
-    return [*normal, distance]
+    return [normal, distance]
 
 class Parser:
 
