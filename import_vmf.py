@@ -46,7 +46,7 @@ def brushToFaces(planes):
 
         # 16 million
         # this is the largest a map can be without "issues" (i.e. planes that are randomly cut off in one axis)
-        size = 2 ** 24
+        size = 2 ** 16
         
         polygon = [
             right * -size + forward * -size + plane[0] * plane[1],
@@ -56,14 +56,17 @@ def brushToFaces(planes):
         ]
 
         if len(polygon) == 0:
+            print("input empty polygon")
             continue
         
         for otherPlane in planes:
             if otherPlane != plane:
-                if len(polygon) != 4:
-                    continue
                 polygon = cutPolygonByPlane(polygon, otherPlane)
-                
+
+        if len(polygon) == 0:
+            print("output empty polygon")
+            continue
+        
         polygons.append(polygon)
         
     return polygons
@@ -275,8 +278,12 @@ class Parser:
             else:
                 print("Ignoring unknown world block '{}'".format(child_name))
 
-        mesh = bpy.data.meshes.new("mesh")  # add a new mesh
-        obj = bpy.data.objects.new("MyObject", mesh)  # add a new object using the mesh
+        self.brushes_to_mesh(brushes, "World")
+
+    def brushes_to_mesh(self, brushes, name):
+                        
+        mesh = bpy.data.meshes.new(name)  # add a new mesh
+        obj = bpy.data.objects.new(name, mesh)  # add a new object using the mesh
 
         bpy.context.collection.objects.link(obj)
         bpy.context.view_layer.objects.active = obj
@@ -299,13 +306,12 @@ class Parser:
                     print("Warning: face has less than 3 vertices")
                     continue
             
-                print(vertices)
                 bm.faces.new(vertices)
                 
-            bmesh.ops.remove_doubles(bm, verts=brush_vertices, dist=0.001)
+            bmesh.ops.remove_doubles(bm, verts=brush_vertices, dist=0.01)
 
         bmesh.ops.reverse_faces(bm, faces=bm.faces)
-        #bm.normal_update()
+        bm.normal_update()
         #bpy.ops.object.mode_set(mode='OBJECT')
         
         bm.to_mesh(mesh)

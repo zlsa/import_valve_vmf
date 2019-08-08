@@ -44,7 +44,7 @@ class ImportVMF(Operator, ImportHelper):
         items=(
             ("1", "Default (1:1)", "One hammer unit is one meter."),
             ("12", "CS:GO (12:1)", "Twelve hammer units to one meter. (Used by Counter-Strike: Global Offensive)"),
-            ("14", "TF2 (145:1)", "Fourteen hammer units to one meter. (Used by Team Fortress 2)"),
+            ("14", "TF2 (14:1)", "Fourteen hammer units to one meter. (Used by Team Fortress 2)"),
             ("0", "Other", "Set a custom scale"),
         ),
         description="Import scale",
