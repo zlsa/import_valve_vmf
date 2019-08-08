@@ -2,6 +2,8 @@
 import traceback
 import mathutils
 import math
+import bpy
+import bmesh 
 
 # plane is a list with four elements:
 # [a, b, c, d]
@@ -84,7 +86,7 @@ def brushToFaces(planes):
     return polygons
 
 def triangleToPlaneDistance(triangle):
-    normal = ((triangle[1] - triangle[0]).cross(triangle[2] - triangle[0])).normalized()
+    normal = ((triangle[2] - triangle[0]).cross(triangle[1] - triangle[0])).normalized()
     distance = triangle[0].dot(normal)
     return [*normal, distance]
 
@@ -269,23 +271,56 @@ class Parser:
 
                 sides.append(plane)
 
-        print("Block sides:")
-        print(sides)
+        #print("Block sides:")
+        #print(sides)
         
-        print("Converted to faces:")
-        print(brushToFaces(sides))
+        faces = brushToFaces(sides)
+
+        return faces
         
     # Parses the contents of a single `world` block.
     def parse_world_block(self, block):
         name, properties, children = block
 
+        faces = []
+
         for child in children:
             child_name = child[0]
 
             if child_name == "solid":
-                self.parse_solid_block(child)
+                faces.extend(self.parse_solid_block(child))
             else:
                 print("Ignoring unknown world block '{}'".format(child_name))
+
+        mesh = bpy.data.meshes.new("mesh")  # add a new mesh
+        obj = bpy.data.objects.new("MyObject", mesh)  # add a new object using the mesh
+
+        bpy.context.collection.objects.link(obj)
+        bpy.context.view_layer.objects.active = obj
+        
+        #bpy.context.collection.objects.link(obj)
+        #bpy.context.active_object = obj  # set as the active object in the scene
+        #obj.select = True  # select object
+
+        bm = bmesh.new()
+        bm.from_mesh(mesh)
+
+        for face in faces:
+            print(face)
+            vertices = [bm.verts.new(i) for i in face]
+            
+            if len(vertices) <= 2:
+                print("Warning: face has less than 3 vertices")
+                continue
+            
+            print(vertices)
+            bm.faces.new(vertices)
+
+        #bm.normal_update()
+        #bpy.ops.object.mode_set(mode='OBJECT')
+        
+        bm.to_mesh(mesh)
+        bm.free()
     
     def parse_next_root_block(self):
         block = self.get_block()

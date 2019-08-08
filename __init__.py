@@ -16,6 +16,18 @@ from bpy.props import StringProperty, EnumProperty, FloatProperty
 from bpy.types import Operator
 import bpy
 
+class ImportVMFPrefs(bpy.types.AddonPreferences):
+    bl_idname = __name__
+    
+    some_prop: bpy.props.FloatProperty(
+        default=1.0
+    )
+
+    # here you specify how they are drawn
+    def draw(self, context):
+        layout = self.layout
+        layout.prop(self, "some_prop")
+
 class ImportVMF(Operator, ImportHelper):
     """Import VMF"""
     bl_idname = "io.import_vmf"
@@ -76,9 +88,13 @@ def menu_func(self, context):
     self.layout.operator(ImportVMF.bl_idname, text="Valve VMF (.vmf)") 
     
 def register():
+    bpy.utils.register_class(ImportVMFPrefs)
+    
     bpy.utils.register_class(ImportVMF)
     bpy.types.TOPBAR_MT_file_import.append(menu_func)
 
 def unregister():
+    bpy.utils.unregister_class(ImportVMFPrefs)
+    
     bpy.utils.unregister_class(ImportVMF)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func)
