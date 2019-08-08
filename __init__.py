@@ -63,6 +63,10 @@ class ImportVMF(Operator, ImportHelper):
             scale = self.scale_value
 
         from . import import_vmf
+
+        # Force update
+        import importlib
+        importlib.reload(import_vmf)
         
         return import_vmf.load(self, context, filename=self.filepath, options={
             "scale": scale
