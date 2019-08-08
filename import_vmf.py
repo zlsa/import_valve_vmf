@@ -9,90 +9,12 @@ import bmesh
 # [a, b, c, d]
 # where ax+by+cz=d
 
-if 0:
-    def dot(a, b):
-        return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-
-    def cross(a, b):
-        return [
-            a[1] * b[2] - b[1] * a[2],
-            a[2] * b[0] - b[2] * a[0],
-            a[0] * b[1] - b[0] * a[1],
-        ]
-
-    def vectorAdd(a, b):
-        return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
-
-    def vectorMultiply(a, b):
-        return [a[0] * b[0], a[1] * b[1], a[2] * b[2]]
-
-    def vectorSub(a, b):
-        return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
-
-    def vectorMultiplyScalar(vec, scalar):
-        return [vec[0] * scalar, vec[1] * scalar, vec[2] * scalar]
-
-    def normalize(vec):
-        # dot(vec, vec) is equal to squared-length of vec
-        # we take the inverse sqrt of that
-        multiplier = 1.0 / math.sqrt(dot(vec, vec))
-        return [vec[0] * multiplier, vec[1] * multiplier, vec[2] * multiplier]
-
-    def distanceToPlane(point, plane):
-        return dot(point, plane) - plane[3]
-
-    def cutPolygonByPlane(polygon, plane):
-        newPolygon = []
-        for i in range(len(polygon)):
-            edge = [polygon[i], polygon[(i + 1) % len(polygon)]]
-            distances = [distanceToPlane(edge[0], plane), distanceToPlane(edge[1], plane)]
-
-            if distances[0] < 0 and distances[1] < 0:
-                newPolygon.append(edge[0])
-            elif distances[0] >= 0 and distances[1] >= 0:
-                continue
-            else:
-                ratio = distances[0] / (distances[0] - distances[1])
-                intersection = [
-                    edge[0][0] * (1 - ratio) + edge[1][0] * ratio,
-                    edge[0][1] * (1 - ratio) + edge[1][1] * ratio,
-                    edge[0][2] * (1 - ratio) + edge[1][2] * ratio,
-                ]
-                if distances[0] < 0:
-                    newPolygon.append(edge[0])
-                newPolygon.append(intersection)
-        return newPolygon
-
-    # convert a brush (list of planes) to a list of polygons (each polygon is a list of vertices)
-    def brushToFaces(planes):
-        polygons = []
-        for plane in planes:
-            up = [0, 0, 1]
-            if plane[2] < -0.9 or plane[2] > 0.9:
-                up = [1, 0, 0]
-
-            planeRight = normalize(cross(plane, up))
-            planeUp = normalize(cross(plane, planeRight))
-
-            polygon = [
-                vectorMultiplyScalar(vectorSub(planeUp, planeRight), 16384),
-                vectorMultiplyScalar(vectorSub(planeRight, planeUp), 16384),
-                vectorMultiplyScalar(vectorAdd(planeUp, planeRight), 16384),
-            ]
-
-            polygon = list(map(lambda a: vectorAdd(a, vectorMultiplyScalar(plane, plane[3])), polygon))
-
-            for otherPlane in planes:
-                if otherPlane == plane: continue
-                polygon = cutPolygonByPlane(polygon, otherPlane)
-            polygons.append(polygon)
-        return polygons
-
 def distanceToPlane(point, plane):
     return point.dot(plane[0]) - plane[1]
 
 def cutPolygonByPlane(polygon, plane):
     newPolygon = []
+
     # polygon[1:] + [polygon[0]] rotates the whole array
     edges = list(zip(polygon, polygon[1:] + [polygon[0]]))
     for edge in edges:
@@ -133,10 +55,17 @@ def brushToFaces(planes):
             right * +size + forward * -size + plane[0] * plane[1],
         ]
 
+        if len(polygon) == 0:
+            continue
+        
         for otherPlane in planes:
             if otherPlane != plane:
+                if len(polygon) != 4:
+                    continue
                 polygon = cutPolygonByPlane(polygon, otherPlane)
+                
         polygons.append(polygon)
+        
     return polygons
 
 def triangleToPlaneDistance(triangle):
@@ -319,7 +248,7 @@ class Parser:
                 # TODO: fix this to parse `(...) (...) ...` better
                 plane = plane[1:-1].split(") (")
 
-                plane = [[int(value) for value in point.split()] for point in plane]
+                plane = [[float(value) for value in point.split()] for point in plane]
 
                 plane = triangleToPlaneDistance([mathutils.Vector(plane[0]), mathutils.Vector(plane[1]), mathutils.Vector(plane[2])])
 
@@ -336,13 +265,13 @@ class Parser:
     def parse_world_block(self, block):
         name, properties, children = block
 
-        faces = []
+        brushes = []
 
         for child in children:
             child_name = child[0]
 
             if child_name == "solid":
-                faces.extend(self.parse_solid_block(child))
+                brushes.append(self.parse_solid_block(child))
             else:
                 print("Ignoring unknown world block '{}'".format(child_name))
 
@@ -359,17 +288,23 @@ class Parser:
         bm = bmesh.new()
         bm.from_mesh(mesh)
 
-        for face in faces:
-            print(face)
-            vertices = [bm.verts.new(i) for i in face]
+        for brush in brushes:
+            brush_vertices = []
             
-            if len(vertices) <= 2:
-                print("Warning: face has less than 3 vertices")
-                continue
+            for face in brush:
+                vertices = [bm.verts.new(i / self.options["scale"]) for i in face]
+                brush_vertices.extend(vertices)
             
-            print(vertices)
-            bm.faces.new(vertices)
+                if len(vertices) <= 2:
+                    print("Warning: face has less than 3 vertices")
+                    continue
+            
+                print(vertices)
+                bm.faces.new(vertices)
+                
+            bmesh.ops.remove_doubles(bm, verts=brush_vertices, dist=0.001)
 
+        bmesh.ops.reverse_faces(bm, faces=bm.faces)
         #bm.normal_update()
         #bpy.ops.object.mode_set(mode='OBJECT')
         
